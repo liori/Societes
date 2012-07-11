@@ -16,6 +16,7 @@ GREEN =  (   0, 255,   0)
 RED =    ( 255,   0,   0)
 YELLOW = ( 255, 250,  60)
 ORANGE = ( 255, 150,  30)
+BROWN =  ( 150,  50,   0)
 
 
 #----------------------------------------------------------------------
@@ -34,13 +35,32 @@ BLOCKSIZEy = int(conf.read(3))
 
 conf.close()
 
+#---DRAWING THE SCREEN-----------------------------------------------
+
 SCREENSIZEx = 1000
 SCREENSIZEy = 600
 
 INTERFACESIZEx = SCREENSIZEx
 INTERFACESIZEy = 100
 
+OUTTERNEXTBUTTONSIZE = 60
+OUTTERNEXTBUTTONPOSx = 920
+OUTTERNEXTBUTTONPOSy = SCREENSIZEy - (OUTTERNEXTBUTTONSIZE + 20)
+
+INNERNEXTBUTTONSIZE = OUTTERNEXTBUTTONSIZE / 2
+INNERNEXTBUTTONPOSx = OUTTERNEXTBUTTONPOSx + (OUTTERNEXTBUTTONSIZE / 4)
+INNERNEXTBUTTONPOSy = OUTTERNEXTBUTTONPOSy + (OUTTERNEXTBUTTONSIZE / 4)
+
+
+
+#---COLORING-------------------------------------------------------------
+
 BGCOLOR = BLACK
+
+INTERFACEZONECOLOR = ORANGE
+
+OUTTERNEXTBUTTONCOLOR = BROWN
+INNERNEXTBUTTONCOLOR = RED
 
 
 #---PLACES----------------------------------------------------------
@@ -69,8 +89,6 @@ def main():
     
     # How big is it?
     NUMBERBLOCKSx, NUMBERBLOCKSy = countMap(theMap)
-    print NUMBERBLOCKSx, NUMBERBLOCKSy
-    print (NUMBERBLOCKSx * BLOCKSIZEx), (NUMBERBLOCKSy * BLOCKSIZEy)
     
     # Sanity check: are all the columns equal? Otherwise there is a problem in the code, at getColor in drawMap. Allowing for columns to be unequal would complicate a lot the code, but I could try to do it, some day.
     for other_column in theMap[1:]:
@@ -88,9 +106,73 @@ def main():
     DISPLAYSURF.fill(BGCOLOR)
     
     while True: # main game loop
-        mouseClicked = False
-        
-        
+        mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey)
+
+def leftTopCoordsOfBlock(smthx, smthy):
+    # Convert map coordinates to pixel coordinates.
+    left = smthx * BLOCKSIZEx
+    top = smthy * BLOCKSIZEy
+    return (left, top)
+
+def getSomethingAtPixel(x, y, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERNEXTBUTTONPOSx, OUTTERNEXTBUTTONPOSy, OUTTERNEXTBUTTONSIZE):
+    
+    for smthx in range(NUMBERBLOCKSx):
+        for smthy in range(NUMBERBLOCKSy):
+            left, top = leftTopCoordsOfBlock(smthx, smthy)
+            blockRect = pygame.Rect(left, top, BLOCKSIZEx, BLOCKSIZEy)
+            smth = (smthx, smthy)
+            if blockRect.collidepoint(x, y):
+                return (smth)
+    
+    nextButtonRect = pygame.Rect(OUTTERNEXTBUTTONPOSx, OUTTERNEXTBUTTONPOSy, OUTTERNEXTBUTTONSIZE, OUTTERNEXTBUTTONSIZE)
+    if nextButtonRect.collidepoint(x, y):
+        return ('nextButtonClick')
+    
+    return (None)
+
+def getColor(theMap, smthx, smthy):
+    # color value for x, y spot is stored in TheMap[x][y]['faction'].
+    # This is used in drawMap.
+    return theMap[smthx][smthy]['faction']
+
+def drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy):
+    # Draws all the blocks.
+    # This is used in main.
+    for smthx in range(NUMBERBLOCKSx):
+        for smthy in range(NUMBERBLOCKSy):
+            left, top = leftTopCoordsOfBlock(smthx, smthy)
+            color = getColor(theMap, smthx, smthy)
+            pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
+
+#----INTERFACE DRAWING--------------
+
+def drawInterface():
+    # Draw the interface.
+    # It’s used in main.
+    interfaceZone()
+    nextButton()
+
+def interfaceZone():
+    InterfaceRect = pygame.draw.rect(DISPLAYSURF, INTERFACEZONECOLOR, (0, (SCREENSIZEy - INTERFACESIZEy), INTERFACESIZEx, INTERFACESIZEy))
+
+def nextButton():
+    OutterNextButton = pygame.draw.rect(DISPLAYSURF, OUTTERNEXTBUTTONCOLOR, (OUTTERNEXTBUTTONPOSx, OUTTERNEXTBUTTONPOSy, OUTTERNEXTBUTTONSIZE, OUTTERNEXTBUTTONSIZE))
+    InnerNextButton = pygame.draw.rect(DISPLAYSURF, INNERNEXTBUTTONCOLOR, (INNERNEXTBUTTONPOSx, INNERNEXTBUTTONPOSy, INNERNEXTBUTTONSIZE, INNERNEXTBUTTONSIZE))
+
+
+
+
+
+#-----------------------------------------
+
+def countMap(theMap):
+    # Count the number of blocks in the map.
+    nbCol = len(theMap)
+    nbRows = len(theMap[0])
+    return nbCol, nbRows
+
+def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey):
+        mouseClicked = False 
         
         # Draw the map.
         drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy)
@@ -110,58 +192,20 @@ def main():
             elif event.type == MOUSEBUTTONUP:
                 mousex, mousey = event.pos
                 mouseClicked = True
+        
         # Where did you click? Was it on a block? What block?
-        blockx, blocky = getBlockAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy)
-        if blockx != None and blocky != None and mouseClicked:
-            print '{}, {}'.format(blockx, blocky)
-            
+        smth = getSomethingAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERNEXTBUTTONPOSx, OUTTERNEXTBUTTONPOSy, OUTTERNEXTBUTTONSIZE)
+        if type(smth) == tuple: # If it was on the map.
+            smthx = smth[0]
+            smthy = smth[1]
+            if mouseClicked:
+                print '{}, {}'.format(smthx, smthy)
+        
+        if smth == 'nextButtonClick':
+            print 'nextButtonClick'
         
         
         pygame.display.update()
         FPSCLOCK.tick(FPS)
-
-def leftTopCoordsOfBlock(blockx, blocky):
-    # Convert map coordinates to pixel coordinates.
-    left = blockx * BLOCKSIZEx
-    top = blocky * BLOCKSIZEy
-    return (left, top)
-
-def getBlockAtPixel(x, y, NUMBERBLOCKSx, NUMBERBLOCKSy):
-    for blockx in range(NUMBERBLOCKSx):
-        for blocky in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(blockx, blocky)
-            blockRect = pygame.Rect(left, top, BLOCKSIZEx, BLOCKSIZEy)
-            if blockRect.collidepoint(x, y):
-                return (blockx, blocky)
-            #elif
-    return (None, None)
-
-def getColor(theMap, blockx, blocky):
-    # color value for x, y spot is stored in TheMap[x][y]['faction'].
-    # This is used in drawMap.
-    return theMap[blockx][blocky]['faction']
-
-def drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy):
-    # Draws all the blocks.
-    # This is used in main.
-    for blockx in range(NUMBERBLOCKSx):
-        for blocky in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(blockx, blocky)
-            color = getColor(theMap, blockx, blocky)
-            pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
-
-def drawInterface():
-    # Draw the interface.
-    # It’s used in main.
-    InterfaceRect = pygame.draw.rect(DISPLAYSURF, ORANGE, (0, (SCREENSIZEy - INTERFACESIZEy), INTERFACESIZEx, INTERFACESIZEy))
-
-def countMap(theMap):
-    # Count the number of blocks in the map.
-    nbCol = len(theMap)
-    nbRows = len(theMap[0])
-    return nbCol, nbRows
-
-
-
     
 main()

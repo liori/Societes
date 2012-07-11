@@ -1,4 +1,4 @@
 Societes
 ========
 
-For the game Sociétés, a strategy gam
+Sociétés, a strategy game.

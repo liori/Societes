@@ -3,7 +3,7 @@
 
 import pygame, sys
 from pygame.locals import *
-from map1 import *
+import map1
 
 #---COLORS-------------------------------------------------------------
 
@@ -29,6 +29,12 @@ FPS = 30
 
 FONT = 'freesansbold.ttf'
 FONTSIZE = 16
+
+LEFT = 'left'
+RIGHT = 'right'
+UP = 'up'
+DOWN = 'down'
+
 
 # These are the blocks sizes. They are in the configuration file “societes.conf”.
 # TOLEARN: ConfigParser
@@ -83,7 +89,7 @@ THE_OTHER = YELLOW
 
 pygame.init()
 
-#------------------------------------------------------------------
+#--MAIN-----------------------------------------------------------
 
 def main():
     global FPSCLOCK, DISPLAYSURF, ALPHADISPLAYSURF
@@ -95,7 +101,7 @@ def main():
     fontObj = pygame.font.Font(FONT, FONTSIZE)
     
     # What’s the map?
-    theMap = createMap()
+    theMap = map1.createMap()
     
     # Calculate stuff about the faction
     pop = calcFaction(theMap)
@@ -113,10 +119,80 @@ def main():
     Wtf = ((BLOCKSIZEx * (NUMBERBLOCKSx)), (BLOCKSIZEy * (NUMBERBLOCKSy + INTERFACESIZEy)))
     pygame.display.set_caption('Sociétés')
     
+    # Draw the map. It also takes note of the position of the map at the moment.
+    drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy)
+    mapPosChangex, mapPosChangey = 0, 0 # The inital map position
+    slideTo = False # As of now, the map didn’t slide.
     
-    DISPLAYSURF.fill(BGCOLOR)
-    
-    mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj)
+    mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj, mapPosChangex, mapPosChangey, slideTo)
+
+
+#---MAIN LOOP-----------------------------------------------------
+
+def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj, mapPosChangex, mapPosChangey, slideTo):
+    while True: # main game loop
+        DISPLAYSURF.fill(BGCOLOR)
+        mouseClicked = False 
+        
+        # The map sliding.
+        if slideTo:
+            if slideTo == UP:
+                mapPosChangey = mapPosChangey - 1
+            elif slideTo == DOWN:
+                mapPosChangey = mapPosChangey + 1
+            elif slideTo == LEFT:
+                mapPosChangex = mapPosChangex - 1
+            elif slideTo == RIGHT:
+                mapPosChangex = mapPosChangex + 1
+        slideTo = False
+        
+        updateMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey)
+
+
+        # The map has to be smaller than the screen + the interface.
+        assert NUMBERBLOCKSx * BLOCKSIZEx < 10001 and NUMBERBLOCKSy * BLOCKSIZEy < 6001, 'La carte est trop grande. La hauteur doit être moins grande que 10001 pixels et la largeur doit être moins grande que 6001 pixels.'
+        
+        
+        # Draw the interface.
+        drawInterface(fontObj, pop)
+        
+        
+        # What happens?
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == MOUSEMOTION:
+                mousex, mousey = event.pos
+            elif event.type == MOUSEBUTTONUP:
+                mousex, mousey = event.pos
+                mouseClicked = True
+            elif event.type == KEYUP:
+                if event.key == K_LEFT:
+                    slideTo = LEFT
+                elif event.key == K_RIGHT:
+                    slideTo = RIGHT
+                elif event.key == K_UP:
+                    slideTo = UP
+                elif event.key == K_DOWN:
+                    slideTo = DOWN
+                    
+        
+        # Where did you click? Was it on a block? What block?
+        smth = getSomethingAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE)
+        if type(smth) == tuple: # If it was on the map. Then take the x and the y coordinates of the region.
+            smthx = smth[0]
+            smthy = smth[1]
+            if mouseClicked:
+                print '{}, {}'.format(smthx, smthy)
+        
+        if smth == 'finishButtonClick' and mouseClicked:
+            pop = finishTurn(pop)
+        
+        
+        pygame.display.update()
+        FPSCLOCK.tick(FPS)
+
 #-------------------------------------------------------------------------
 
 
@@ -143,7 +219,10 @@ def getSomethingAtPixel(x, y, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERFINISHBUTTONPO
     return (None)
 
 
-#---STRICTLY GAME RELATED STUFF------------------------------------
+
+
+
+#---MAP------------------------------------------------------
 
 def getColor(theMap, smthx, smthy):
     # color value for x, y spot is stored in TheMap[x][y]['faction'].
@@ -155,9 +234,25 @@ def drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy):
     # This is used in main.
     for smthx in range(NUMBERBLOCKSx):
         for smthy in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(smthx, smthy)
+            left, top = leftTopCoordsOfBlock(smthx, smthy) # smthx - 1 MALADE !!!!
             color = getColor(theMap, smthx, smthy)
             pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
+
+def countMap(theMap):
+    # Count the number of blocks in the map.
+    nbCol = len(theMap)
+    nbRows = len(theMap[0])
+    return nbCol, nbRows
+
+def updateMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey):
+    # Update the map after a sliding (moving camera)
+    for smthx in range(NUMBERBLOCKSx):
+        for smthy in range(NUMBERBLOCKSy):
+            left, top = leftTopCoordsOfBlock(smthx + mapPosChangex, smthy + mapPosChangey)
+            color = getColor(theMap, smthx, smthy)
+            pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
+
+#---STRICTLY GAME RELATED STUFF------------------------------
 
 def calcFaction(theMap):
     yourRegions = []
@@ -170,6 +265,12 @@ def calcFaction(theMap):
     for region in yourRegions:
         pop = pop + region['pop']
     
+    return pop
+
+def finishTurn(pop):
+    # Oulah la flexibilité…
+    pop = pop * 1.10
+    pop = int(round(pop, 0))
     return pop
 
 #----INTERFACE DRAWING--------------
@@ -195,60 +296,11 @@ def someText(fontObj, pop):
     popTextRect.top = POPTEXTTOP
     DISPLAYSURF.blit(popTextSurface, popTextRect)
 
-def finishTurn(pop):
-    # Oulah…
-    pop = pop * 1.10
-    return pop
+
     
 #-----------------------------------------
 
-def countMap(theMap):
-    # Count the number of blocks in the map.
-    nbCol = len(theMap)
-    nbRows = len(theMap[0])
-    return nbCol, nbRows
 
-#---MAIN LOOP-----------------------------------------------------
 
-def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj):
-    while True: # main game loop
-        mouseClicked = False 
-        
-        # Draw the map.
-        drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy)
-        # The map has to be smaller than the screen + the interface.
-        assert NUMBERBLOCKSx * BLOCKSIZEx < 1001 and NUMBERBLOCKSy * BLOCKSIZEy < 601, 'La carte est trop grande. La hauteur doit être moins grande que 1001 pixels et la largeur doit être moins grande que 601 pixels.'
-        
-        
-        # Draw the interface.
-        drawInterface(fontObj, pop)
-        
-        
-        # What happens?
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == MOUSEMOTION:
-                mousex, mousey = event.pos
-            elif event.type == MOUSEBUTTONUP:
-                mousex, mousey = event.pos
-                mouseClicked = True
-        
-        # Where did you click? Was it on a block? What block?
-        smth = getSomethingAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE)
-        if type(smth) == tuple: # If it was on the map.
-            smthx = smth[0]
-            smthy = smth[1]
-            if mouseClicked:
-                print '{}, {}'.format(smthx, smthy)
-        
-        if smth == 'finishButtonClick' and mouseClicked:
-            pop = finishTurn(pop)
-            print pop
-        
-        
-        pygame.display.update()
-        FPSCLOCK.tick(FPS)
     
 main()

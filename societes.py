@@ -52,6 +52,9 @@ conf.close()
 SCREENSIZEx = 1000
 SCREENSIZEy = 600
 
+HALFSCREENx = int(SCREENSIZEx / 2)
+HALFSCREENy = int(SCREENSIZEy / 2)
+
 INTERFACESIZEx = SCREENSIZEx
 INTERFACESIZEy = 100
 
@@ -106,7 +109,7 @@ def main():
     # Calculate stuff about the faction
     pop = calcFaction(theMap)
     
-    # How big is it?
+    # How big is it? In blocks.
     NUMBERBLOCKSx, NUMBERBLOCKSy = countMap(theMap)
     
     # Sanity check: are all the columns equal? Otherwise there is a problem in the code, at getColor in drawMap. Allowing for columns to be unequal would complicate a lot the code, but I could try to do it, some day.
@@ -119,10 +122,9 @@ def main():
     Wtf = ((BLOCKSIZEx * (NUMBERBLOCKSx)), (BLOCKSIZEy * (NUMBERBLOCKSy + INTERFACESIZEy)))
     pygame.display.set_caption('Sociétés')
     
-    # Draw the map. It also takes note of the position of the map at the moment.
-    drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy)
-    mapPosChangex, mapPosChangey = 0, 0 # The inital map position
     slideTo = False # As of now, the map didn’t slide.
+    mapPosChangex = 0
+    mapPosChangey = 0
     
     mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj, mapPosChangex, mapPosChangey, slideTo)
 
@@ -130,9 +132,12 @@ def main():
 #---MAIN LOOP-----------------------------------------------------
 
 def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj, mapPosChangex, mapPosChangey, slideTo):
+    global BLOCKSIZEx, BLOCKSIZEy
     while True: # main game loop
         DISPLAYSURF.fill(BGCOLOR)
         mouseClicked = False 
+        
+        
         
         # The map sliding.
         if slideTo:
@@ -146,13 +151,19 @@ def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj,
                 mapPosChangex = mapPosChangex + 1
         slideTo = False
         
-        updateMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey)
-
-
+        
+        
+        drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey)
+        
+        
+        
         # The map has to be smaller than the screen + the interface.
         assert NUMBERBLOCKSx * BLOCKSIZEx < 10001 and NUMBERBLOCKSy * BLOCKSIZEy < 6001, 'La carte est trop grande. La hauteur doit être moins grande que 10001 pixels et la largeur doit être moins grande que 6001 pixels.'
+        assert BLOCKSIZEx < 501 and BLOCKSIZEy < 501, 'The blocksize must be under 501 pixels'
+        assert BLOCKSIZEx > 9 and BLOCKSIZEy > 9, 'The blocksize must be over 9 pixels'
         
         
+
         # Draw the interface.
         drawInterface(fontObj, pop)
         
@@ -165,8 +176,20 @@ def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj,
             elif event.type == MOUSEMOTION:
                 mousex, mousey = event.pos
             elif event.type == MOUSEBUTTONUP:
+                if event.button == 1:
+                    mouseClicked = True
+                    
+                # Zooming in and out
+                elif event.button == 4:
+                    if (BLOCKSIZEx / 1.5) >= 9 and (BLOCKSIZEy / 1.5) >= 9:
+                        BLOCKSIZEx = BLOCKSIZEx / 1.5
+                        BLOCKSIZEy = BLOCKSIZEy / 1.5
+                elif event.button == 5:
+                    if (BLOCKSIZEx * 1.5) <= 501 and (BLOCKSIZEy * 1.5) <= 501:
+                        BLOCKSIZEx = BLOCKSIZEx * 1.5
+                        BLOCKSIZEy = BLOCKSIZEy * 1.5
+                
                 mousex, mousey = event.pos
-                mouseClicked = True
             elif event.type == KEYUP:
                 if event.key == K_LEFT:
                     slideTo = LEFT
@@ -177,9 +200,10 @@ def mainLoop(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mousex, mousey, pop, fontObj,
                 elif event.key == K_DOWN:
                     slideTo = DOWN
                     
+                    
         
         # Where did you click? Was it on a block? What block?
-        smth = getSomethingAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE)
+        smth = getSomethingAtPixel(mousex, mousey, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE)
         if type(smth) == tuple: # If it was on the map. Then take the x and the y coordinates of the region.
             smthx = smth[0]
             smthy = smth[1]
@@ -202,11 +226,11 @@ def leftTopCoordsOfBlock(smthx, smthy):
     top = smthy * BLOCKSIZEy
     return (left, top)
 
-def getSomethingAtPixel(x, y, NUMBERBLOCKSx, NUMBERBLOCKSy, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE):
+def getSomethingAtPixel(x, y, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey, OUTTERFINISHBUTTONPOSx, OUTTERFINISHBUTTONPOSy, OUTTERFINISHBUTTONSIZE):
     
     for smthx in range(NUMBERBLOCKSx):
         for smthy in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(smthx, smthy)
+            left, top = leftTopCoordsOfBlock(smthx + mapPosChangex, smthy + mapPosChangey)
             blockRect = pygame.Rect(left, top, BLOCKSIZEx, BLOCKSIZEy)
             smth = (smthx, smthy)
             if blockRect.collidepoint(x, y):
@@ -229,12 +253,11 @@ def getColor(theMap, smthx, smthy):
     # This is used in drawMap.
     return theMap[smthx][smthy]['faction']
 
-def drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy):
-    # Draws all the blocks.
-    # This is used in main.
+def drawMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey):
+    # Update the map after a sliding (moving camera)
     for smthx in range(NUMBERBLOCKSx):
         for smthy in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(smthx, smthy) # smthx - 1 MALADE !!!!
+            left, top = leftTopCoordsOfBlock(smthx + mapPosChangex, smthy + mapPosChangey)
             color = getColor(theMap, smthx, smthy)
             pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
 
@@ -244,13 +267,7 @@ def countMap(theMap):
     nbRows = len(theMap[0])
     return nbCol, nbRows
 
-def updateMap(theMap, NUMBERBLOCKSx, NUMBERBLOCKSy, mapPosChangex, mapPosChangey):
-    # Update the map after a sliding (moving camera)
-    for smthx in range(NUMBERBLOCKSx):
-        for smthy in range(NUMBERBLOCKSy):
-            left, top = leftTopCoordsOfBlock(smthx + mapPosChangex, smthy + mapPosChangey)
-            color = getColor(theMap, smthx, smthy)
-            pygame.draw.rect(DISPLAYSURF, color, (left, top, BLOCKSIZEx, BLOCKSIZEy))
+
 
 #---STRICTLY GAME RELATED STUFF------------------------------
 

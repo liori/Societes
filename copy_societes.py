@@ -90,7 +90,7 @@ def main():
     pop = 0 #TODO
     
     # Make the screen.
-    INVISIBLESURF = pygame.display.set_mode((SCREENSIZEx, SCREENSIZEy))
+    INVISIBLESURF = pygame.Surface((SCREENSIZEx, SCREENSIZEy))
     VISIBLESURF = pygame.display.set_mode((SCREENSIZEx, SCREENSIZEy))
     pygame.display.set_caption('Sociétés')
     
